@@ -3,36 +3,25 @@ name: Download Dota Game Files
 on:
   schedule:
     - cron: "0 8 * * *"
-
   workflow_dispatch:
 
 jobs:
   download:
     runs-on: ubuntu-latest
 
-    permissions:
-      # Give the default GITHUB_TOKEN write permission to commit and push the changed files back to the repository.
-      contents: write
-
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v3
-      - name: Download new game files
-        run: npm install && node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'
-      - name: Run Decompiler for pak01_dir.vpk with ValveResourceFormat 8.1
+        with:
+          node-version: "16"
+      - name: Установка зависимостей
+        run: npm install
+      - name: Скачивание и обработка VPK-файлов по пакетам
+        env:
+          USERNAME: ${{ secrets.USERNAME }}
+          PASSWORD: ${{ secrets.PASSWORD }}
         run: |
-          if [ -f "./temp/pak01_dir.vpk" ]; then
-            chmod +x ./Decompiler
-            ./Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ"
-          else
-            echo "pak01_dir.vpk not found, skipping decompilation"
-          fi
-      - name: Read manifestId.txt
-        id: manifestId
-        uses: juliangruber/read-file-action@v1
-        with:
-          path: ./static/manifestId.txt
-      - name: Commit & push changes
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: "manifest ${{ steps.manifestId.outputs.content }}"
+          chmod +x ./Decompiler
+          node index.js "$USERNAME" "$PASSWORD"

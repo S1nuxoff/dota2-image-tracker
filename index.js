@@ -5,6 +5,7 @@
 const SteamUser = require("steam-user");
 const fs = require("fs");
 const vpk = require("vpk");
+const { exec } = require("child_process");
 
 const appId = 570;
 const depotIds = [381451, 381452, 381453, 381454, 381455, 373301];
@@ -115,64 +116,147 @@ function getRequiredVPKFiles(vpkDir) {
 }
 
 async function downloadVPKArchives(user, manifests, requiredIndices) {
-  console.log(`Required VPK files: ${requiredIndices}`);
+  console.log(`Требуемые VPK-файлы: ${requiredIndices}`);
 
-  let fileIndex = 1;
-  const totalFiles = requiredIndices.length;
+  const batchSize = 10; // Размер пакета
+  for (let i = 0; i < requiredIndices.length; i += batchSize) {
+    const batchIndices = requiredIndices.slice(i, i + batchSize);
+    console.log(`Обработка пакета: ${batchIndices}`);
 
-  for (const index of requiredIndices) {
+    for (const index of batchIndices) {
+      const paddedIndex = index.toString().padStart(3, "0");
+      const fileName = `pak01_${paddedIndex}.vpk`;
+
+      let fileFound = false;
+
+      for (const depotId of depotIds) {
+        const manifest = manifests[depotId];
+
+        if (!manifest) {
+          continue;
+        }
+
+        const file = manifest.files.find((f) => f.filename.endsWith(fileName));
+
+        if (file) {
+          const filePath = `${temp}/${fileName}`;
+          console.log(`Скачивание ${fileName} из депо ${depotId}`);
+
+          await user.downloadFile(appId, depotId, file, filePath);
+          fileFound = true;
+          break;
+        }
+      }
+
+      if (!fileFound) {
+        console.error(`Файл ${fileName} не найден ни в одном депо.`);
+      }
+    }
+
+    // Запуск декомпилятора на загруженных VPK-файлах
+    await runDecompiler(batchIndices);
+
+    // Коммит изменений
+    await setupGitConfig();
+    await commitChanges();
+
+    // Очистка файлов для освобождения места
+    await cleanupFiles(batchIndices);
+  }
+}
+
+async function runDecompiler(batchIndices) {
+  console.log("Запуск декомпилятора...");
+  return new Promise((resolve, reject) => {
+    exec(
+      './Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ"',
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Ошибка при запуске декомпилятора: ${error.message}`);
+          reject(error);
+        } else {
+          console.log(`Декомпилятор завершен: ${stdout}`);
+          resolve();
+        }
+      }
+    );
+  });
+}
+
+async function setupGitConfig() {
+  return new Promise((resolve, reject) => {
+    exec(
+      'git config user.name "GitHub Actions" && git config user.email "actions@github.com"',
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Ошибка настройки Git: ${error.message}`);
+          reject(error);
+        } else {
+          resolve();
+        }
+      }
+    );
+  });
+}
+
+async function commitChanges() {
+  console.log("Коммит изменений...");
+  return new Promise((resolve, reject) => {
+    exec(
+      'git add . && git commit -m "Обновление файлов игры" && git push',
+      (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Ошибка при коммите: ${error.message}`);
+          reject(error);
+        } else {
+          console.log(`Коммит выполнен: ${stdout}`);
+          resolve();
+        }
+      }
+    );
+  });
+}
+
+async function cleanupFiles(batchIndices) {
+  console.log("Очистка файлов...");
+
+  // Удаление VPK-файлов
+  for (const index of batchIndices) {
     const paddedIndex = index.toString().padStart(3, "0");
     const fileName = `pak01_${paddedIndex}.vpk`;
-
-    let fileFound = false;
-
-    for (const depotId of depotIds) {
-      const manifest = manifests[depotId];
-
-      if (!manifest) {
-        continue;
-      }
-
-      const file = manifest.files.find((f) => f.filename.endsWith(fileName));
-
-      if (file) {
-        const filePath = `${temp}/${fileName}`;
-        const status = `[${fileIndex}/${totalFiles}]`;
-
-        console.log(`${status} Downloading ${fileName} from depot ${depotId}`);
-
-        await user.downloadFile(appId, depotId, file, filePath);
-        fileFound = true;
-        break;
-      }
+    const filePath = `${temp}/${fileName}`;
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Удален файл: ${filePath}`);
     }
+  }
 
-    if (!fileFound) {
-      console.error(`File ${fileName} not found in any depot.`);
-    }
-
-    fileIndex++;
+  // Удаление распакованного контента
+  const extractPath = "./static/panorama/images/econ";
+  if (fs.existsSync(extractPath)) {
+    fs.rmSync(extractPath, { recursive: true, force: true });
+    console.log(`Удален распакованный контент: ${extractPath}`);
   }
 }
 
 if (process.argv.length != 4) {
   console.error(
-    `Missing input arguments, expected 4 got ${process.argv.length}`
+    `Недостаточно аргументов, ожидается 4, получено ${process.argv.length}`
   );
   process.exit(1);
 }
 
 if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir);
+  fs.mkdirSync(dir, { recursive: true });
 }
 
 if (!fs.existsSync(temp)) {
-  fs.mkdirSync(temp);
+  fs.mkdirSync(temp, { recursive: true });
 }
 
 const user = new SteamUser();
 
-console.log("Logging into Steam....");
+console.log("Вход в Steam...");
 
 user.logOn({
   accountName: process.argv[2],
@@ -185,13 +269,13 @@ user.once("loggedOn", async () => {
   const manifests = await getManifests(user);
 
   if (!manifests[373301]) {
-    console.error(`Manifest for depot 373301 could not be retrieved.`);
+    console.error(`Манифест для депо 373301 не удалось получить.`);
     process.exit(1);
   }
 
   const latestManifestId = manifests[373301].manifestId;
 
-  console.log(`Obtained latest manifest ID: ${latestManifestId}`);
+  console.log(`Получен последний ID манифеста: ${latestManifestId}`);
 
   let existingManifestId = "";
 
@@ -204,25 +288,24 @@ user.once("loggedOn", async () => {
   }
 
   if (existingManifestId == latestManifestId) {
-    console.log("Latest manifest ID matches existing manifest ID, exiting");
+    console.log("Последний ID манифеста совпадает с существующим, выход");
     process.exit(0);
   }
 
-  console.log(
-    "Latest manifest ID does not match existing manifest ID, downloading game files"
-  );
+  console.log("Новый манифест найден, начинается загрузка файлов игры");
 
   const vpkDir = await downloadVPKDir(user, manifests[373301]);
 
   const requiredIndices = getRequiredVPKFiles(vpkDir);
 
-  await downloadVPKArchives(user, manifests, requiredIndices);
-
+  // Сохраняем новый manifestId перед началом процесса
   try {
     fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
   } catch (error) {
-    throw err;
+    throw error;
   }
+
+  await downloadVPKArchives(user, manifests, requiredIndices);
 
   process.exit(0);
 });
