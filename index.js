@@ -119,7 +119,7 @@ const path = require("path");
 
 async function downloadVPKArchives(user, manifests, requiredIndices) {
   console.log(`Требуемые VPK-файлы: ${requiredIndices}`);
-  const batchSize = 10; // Размер пакета
+  const batchSize = 1; // Размер пакета
 
   for (let i = 0; i < requiredIndices.length; i += batchSize) {
     const batchIndices = requiredIndices.slice(i, i + batchSize);
