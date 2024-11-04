@@ -2,18 +2,7 @@ name: Download Dota Game Files
 
 on:
   schedule:
-<<<<<<< HEAD:.github/workflows/download-dota-files.yml
-<<<<<<< HEAD
-    - cron: "50 7 * * *"
-=======
-     - cron: "50 7 * * *" # Запускается каждый день в 8 утра по UTC
->>>>>>> 0dda5f72ff7086cd8b4278ebf29bee5a1f669684:.github/workflows/workflow.yml
-=======
-    - cron: "50 7 * * *"  # Запуск в 8:50 по польскому времени (7:50 UTC)
-=======
-    - cron: "0 8 * * *"  # Запускается каждый день в 8 утра по UTC
->>>>>>> cfceb7b (Update workflow.yml):.github/workflows/workflow.yml
->>>>>>> 6bba9ad (Fixed bag in index.js)
+    - cron: "0 8 * * *"
 
   workflow_dispatch:
 
@@ -22,32 +11,14 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-<<<<<<< HEAD:.github/workflows/download-dota-files.yml
+      # Give the default GITHUB_TOKEN write permission to commit and push the changed files back to the repository.
       contents: write
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@master
       - uses: actions/setup-node@v3
-<<<<<<< HEAD
-=======
-        with:
-          node-version: '20'  # Обновите версию Node.js до 20
->>>>>>> 6bba9ad (Fixed bag in index.js)
-=======
-      contents: write  # Разрешает токену GITHUB_TOKEN записывать изменения
-
-    steps:
-      - uses: actions/checkout@v3  # Проверка репозитория
-      - uses: actions/setup-node@v3  # Настройка Node.js
-<<<<<<< HEAD
->>>>>>> 0dda5f72ff7086cd8b4278ebf29bee5a1f669684:.github/workflows/workflow.yml
-=======
->>>>>>> cfceb7b (Update workflow.yml):.github/workflows/workflow.yml
->>>>>>> 6bba9ad (Fixed bag in index.js)
-
       - name: Download new game files
         run: npm install && node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'
-
       - name: Run Decompiler for pak01_dir.vpk with ValveResourceFormat 8.1
         run: |
           if [ -f "./temp/pak01_dir.vpk" ]; then
@@ -56,13 +27,11 @@ jobs:
           else
             echo "pak01_dir.vpk not found, skipping decompilation"
           fi
-
       - name: Read manifestId.txt
         id: manifestId
         uses: juliangruber/read-file-action@v1
         with:
           path: ./static/manifestId.txt
-
       - name: Commit & push changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
