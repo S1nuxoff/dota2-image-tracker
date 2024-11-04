@@ -13,10 +13,10 @@ const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
 
 const vpkFolders = [
-  // "panorama/images/econ/items",
+  "econ/ui/treasure/ti_2023_treasure",
   //   "panorama/images/econ/default_generated",
   // "panorama/images/econ/music_kits",
-  "panorama/images/econ/patches",
+  // "panorama/images/econ/patches",
   //   "panorama/images/econ/season_icons",
   //   "panorama/images/econ/set_icons",
   //   "panorama/images/econ/status_icons",
