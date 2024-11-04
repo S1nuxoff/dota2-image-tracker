@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  download:ы
+  download:
     runs-on: ubuntu-latest
 
     permissions:
