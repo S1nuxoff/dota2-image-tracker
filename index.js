@@ -45,10 +45,10 @@ const vpkFiles = [
   "panorama/images/econ/talentcontent",
   "panorama/images/econ/teamfancontent",
 ];
-
-const BATCH_SIZE = 1;
+const BATCH_SIZE = 1; // Set to 1 for testing
 const requiredVPKsFile = "requiredVPKs.txt";
 const processedVPKsFile = "processedVPKs.txt";
+const batchStatusFile = "batch_status.txt";
 
 if (process.argv.length != 4) {
   console.error(
@@ -81,7 +81,8 @@ user.once("loggedOn", async () => {
 
   if (!manifests[373301]) {
     console.error(`Manifest for depot 373301 could not be retrieved.`);
-    process.exit(1);
+    fs.writeFileSync(batchStatusFile, "DONE");
+    process.exit(0);
   }
 
   const latestManifestId = manifests[373301].manifestId;
@@ -100,6 +101,7 @@ user.once("loggedOn", async () => {
 
   if (existingManifestId == latestManifestId) {
     console.log("Latest manifest ID matches existing manifest ID, exiting");
+    fs.writeFileSync(batchStatusFile, "DONE");
     process.exit(0);
   }
 
@@ -125,6 +127,7 @@ user.once("loggedOn", async () => {
     console.log("All VPK files have been processed.");
     // Update manifestId.txt
     fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
+    fs.writeFileSync(batchStatusFile, "DONE");
     process.exit(0);
   }
 
@@ -138,8 +141,11 @@ user.once("loggedOn", async () => {
   processedIndices = processedIndices.concat(batchIndices);
   fs.writeFileSync(processedVPKsFile, processedIndices.join(","));
 
-  // Exit with code 1 to indicate more batches to process
-  process.exit(1);
+  // Indicate that there are more batches to process
+  fs.writeFileSync(batchStatusFile, "MORE");
+
+  // Exit with code 0
+  process.exit(0);
 });
 
 async function getManifests(user) {

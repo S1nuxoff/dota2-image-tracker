@@ -24,24 +24,43 @@ jobs:
           git config user.email 'actions@github.com'
       - name: Install dependencies
         run: npm install
+      - name: Ensure Decompiler is executable
+        run: chmod +x ./Decompiler
       - name: Process VPK files in batches
         run: |
           while true; do
-            node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'
-            EXIT_CODE=$?
-            if [ $EXIT_CODE -eq 0 ]; then
+            # Run the index.js script and prevent failure on non-zero exit code
+            node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}' || true
+
+            # Read the batch status
+            BATCH_STATUS=$(cat batch_status.txt)
+            echo "Batch Status: $BATCH_STATUS"
+
+            if [ "$BATCH_STATUS" = "DONE" ]; then
               echo "All VPK files processed."
               break
             fi
+
+            # Check if pak01_dir.vpk exists
             if [ -f "./temp/pak01_dir.vpk" ]; then
-              chmod +x ./Decompiler
+              # Run Decompiler
               ./Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ"
             else
               echo "pak01_dir.vpk not found, skipping decompilation"
             fi
+
+            # Commit and push changes
             git add .
             git commit -m "Processed batch"
             git push
+
+            # Clean up to free disk space
             rm -rf ./temp/*
             rm -rf ./static/*
           done
+      - name: Final Commit
+        if: ${{ steps.checkout.outputs.changed == 'true' }}
+        run: |
+          git add .
+          git commit -m "Final commit after all batches"
+          git push
