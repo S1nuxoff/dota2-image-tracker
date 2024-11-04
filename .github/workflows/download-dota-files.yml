@@ -32,7 +32,7 @@ jobs:
             # Run the index.js script and prevent failure on non-zero exit code
             node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}' || true
 
-            # Read the batch status
+            # Читаем статус партии
             BATCH_STATUS=$(cat batch_status.txt)
             echo "Batch Status: $BATCH_STATUS"
 
@@ -41,22 +41,22 @@ jobs:
               break
             fi
 
-            # Check if pak01_dir.vpk exists
+            # Проверяем, существует ли файл pak01_dir.vpk
             if [ -f "./temp/pak01_dir.vpk" ]; then
-              # Run Decompiler
+              # Запуск декомпилятора
               ./Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ"
             else
               echo "pak01_dir.vpk not found, skipping decompilation"
             fi
 
-            # Commit and push changes
-            git add .
-            git commit -m "Processed batch"
+            # Коммитим только новые файлы
+            git add -A --ignore-errors  # Добавляем все новые файлы
+            git diff --cached --name-only --diff-filter=A | xargs git add  # Коммитим только добавленные файлы
+            git commit -m "Processed batch $(date +"%Y-%m-%d %H:%M:%S")" || echo "No new files to commit"
             git push
 
-            # Clean up to free disk space
+            # Очистка временных файлов для следующей партии
             rm -rf ./temp/*
-            rm -rf ./static/*
           done
       - name: Final Commit
         if: ${{ steps.checkout.outputs.changed == 'true' }}
