@@ -258,7 +258,7 @@ user.once("loggedOn", async () => {
   }
 
   // Get the next batch of up to 10 indices
-  const batchSize = 10;
+  const batchSize = 2;
   const indicesToProcess = unprocessedIndices.slice(0, batchSize);
 
   console.log(`Processing indices: ${indicesToProcess}`);
