@@ -46,7 +46,7 @@ const vpkFiles = [
   "panorama/images/econ/teamfancontent",
 ];
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 1;
 const requiredVPKsFile = "requiredVPKs.txt";
 const processedVPKsFile = "processedVPKs.txt";
 
