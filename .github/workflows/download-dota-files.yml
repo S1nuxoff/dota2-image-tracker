@@ -2,7 +2,11 @@ name: Download Dota Game Files
 
 on:
   schedule:
+<<<<<<< HEAD:.github/workflows/download-dota-files.yml
     - cron: "50 7 * * *"
+=======
+     - cron: "50 7 * * *" # Запускается каждый день в 8 утра по UTC
+>>>>>>> 0dda5f72ff7086cd8b4278ebf29bee5a1f669684:.github/workflows/workflow.yml
 
   workflow_dispatch:
 
@@ -11,11 +15,19 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
+<<<<<<< HEAD:.github/workflows/download-dota-files.yml
       contents: write
 
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
+=======
+      contents: write  # Разрешает токену GITHUB_TOKEN записывать изменения
+
+    steps:
+      - uses: actions/checkout@v3  # Проверка репозитория
+      - uses: actions/setup-node@v3  # Настройка Node.js
+>>>>>>> 0dda5f72ff7086cd8b4278ebf29bee5a1f669684:.github/workflows/workflow.yml
 
       - name: Download new game files
         run: npm install && node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'

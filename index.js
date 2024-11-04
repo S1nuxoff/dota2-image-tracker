@@ -62,15 +62,15 @@ async function getManifests(user) {
 }
 
 async function downloadVPKDir(user, manifest) {
-  const dirFile = manifest.manifest.files.find((file) =>
+  const dirFile = manifest.files.find((file) =>
     file.filename.endsWith("dota\\pak01_dir.vpk")
   );
 
-  console.log(`Downloading vpk dir`);
+  console.log(`Downloading pak01_dir.vpk from depot 373301`);
 
-  await user.downloadFile(appId, depotId, dirFile, `${temp}/pak01_dir.vpk`);
+  await user.downloadFile(appId, 373301, dirFile, `${temp}/pak01_dir.vpk`);
 
-  vpkDir = new vpk(`${temp}/pak01_dir.vpk`);
+  const vpkDir = new vpk(`${temp}/pak01_dir.vpk`);
   vpkDir.load();
 
   return vpkDir;
