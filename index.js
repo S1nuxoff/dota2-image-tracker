@@ -118,7 +118,7 @@ function getRequiredVPKFiles(vpkDir) {
 async function downloadVPKArchives(user, manifests, requiredIndices) {
   console.log(`Требуемые VPK-файлы: ${requiredIndices}`);
 
-  const batchSize = 10; // Размер пакета
+  const batchSize = 2; // Размер пакета
   for (let i = 0; i < requiredIndices.length; i += batchSize) {
     const batchIndices = requiredIndices.slice(i, i + batchSize);
     console.log(`Обработка пакета: ${batchIndices}`);
@@ -165,21 +165,42 @@ async function downloadVPKArchives(user, manifests, requiredIndices) {
   }
 }
 
-async function runDecompiler(batchIndices) {
+const { spawn } = require("child_process");
+
+async function runDecompiler() {
   console.log("Запуск декомпилятора...");
+
   return new Promise((resolve, reject) => {
-    exec(
-      './Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ"',
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error(`Ошибка при запуске декомпилятора: ${error.message}`);
-          reject(error);
-        } else {
-          console.log(`Декомпилятор завершен: ${stdout}`);
-          resolve();
-        }
+    const decompiler = spawn("./Decompiler", [
+      "-i",
+      "./temp/pak01_dir.vpk",
+      "-o",
+      "./static",
+      "-e",
+      "vtex_c",
+      "-d",
+      "-f",
+      "panorama/images/econ",
+    ]);
+
+    decompiler.stdout.on("data", (data) => {
+      process.stdout.write(`stdout: ${data}`);
+    });
+
+    decompiler.stderr.on("data", (data) => {
+      process.stderr.write(`stderr: ${data}`);
+    });
+
+    decompiler.on("close", (code) => {
+      if (code === 0) {
+        console.log(`Декомпилятор успешно завершен с кодом ${code}`);
+        resolve();
+      } else {
+        reject(
+          new Error(`Декомпилятор завершен с ошибкой, код выхода: ${code}`)
+        );
       }
-    );
+    });
   });
 }
 
