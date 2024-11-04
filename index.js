@@ -12,7 +12,39 @@ const dir = `./static`;
 const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
 
-const vpkFiles = ["panorama/images/econ/ui/treasure/ti_2023_treasure"];
+const vpkFiles = [
+  "panorama/images/econ/challenges",
+  "panorama/images/econ/announcer",
+  "panorama/images/econ/artifacts",
+  "panorama/images/econ/bundles",
+  "panorama/images/econ/casters",
+  "panorama/images/econ/courier",
+  "panorama/images/econ/crafting",
+  "panorama/images/econ/creeps",
+  "panorama/images/econ/cursor_pack",
+  "panorama/images/econ/custom_games_pass",
+  "panorama/images/econ/development",
+  "panorama/images/econ/heroes",
+  "panorama/images/econ/huds",
+  "panorama/images/econ/items",
+  "panorama/images/econ/leagues",
+  "panorama/images/econ/loading_screens",
+  "panorama/images/econ/music",
+  "panorama/images/econ/pennant",
+  "panorama/images/econ/pets",
+  "panorama/images/econ/pins",
+  "panorama/images/econ/props_gameplay",
+  "panorama/images/econ/sets",
+  "panorama/images/econ/sockets",
+  "panorama/images/econ/taunts",
+  "panorama/images/econ/terrain",
+  "panorama/images/econ/tools",
+  "panorama/images/econ/ui/treasure",
+  "panorama/images/econ/voicepack",
+  "panorama/images/econ/stickers",
+  "panorama/images/econ/talentcontent",
+  "panorama/images/econ/teamfancontent",
+];
 
 async function getManifests(user) {
   console.log(`Fetching product info for appId ${appId}`);
