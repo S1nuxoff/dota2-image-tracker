@@ -1,27 +1,67 @@
-name: Download Dota Game Files
+name: Download and Decompile Dota Game Files
 
 on:
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 * * * *" # Runs every hour
   workflow_dispatch:
 
 jobs:
-  download:
+  download_and_decompile:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write # For committing changes
 
     steps:
       - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-node@v3
-        with:
-          node-version: "16"
-      - name: Установка зависимостей
+          node-version: "14"
+
+      - name: Install dependencies
         run: npm install
-      - name: Скачивание и обработка VPK-файлов по пакетам
-        env:
-          USERNAME: ${{ secrets.USERNAME }}
-          PASSWORD: ${{ secrets.PASSWORD }}
+
+      - name: Download new game files
+        run: npm install && node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'
+
+      - name: Run Decompiler for current batch
         run: |
-          chmod +x ./Decompiler
-          node index.js "$USERNAME" "$PASSWORD"
+          if [ -f "./temp/pak01_dir.vpk" ]; then
+            chmod +x ./Decompiler
+            ./Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ"
+          else
+            echo "pak01_dir.vpk not found, skipping decompilation"
+          fi
+
+      - name: Read currentBatch.txt
+        id: current_batch
+        run: |
+          if [ -f "./static/currentBatch.txt" ]; then
+            indices=$(cat ./static/currentBatch.txt | xargs)
+            echo "Current batch indices: $indices"
+            echo "content=$indices" >> $GITHUB_OUTPUT
+          else
+            echo "No current batch"
+            echo "content=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit & push changes
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Processed batch with indices: ${{ steps.current_batch.outputs.content }}"
+          file_pattern: "./static/*"
+
+      - name: Delete processed VPK files and unpacked content
+        run: |
+          if [ -f "./static/currentBatch.txt" ]; then
+            while read index; do
+              padded_index=$(printf "%03d" $index)
+              file_name="pak01_${padded_index}.vpk"
+              rm -f "./temp/$file_name"
+            done < "./static/currentBatch.txt"
+            rm -f "./static/currentBatch.txt"
+          fi
+          rm -rf ./static/*
+          rm -f ./temp/pak01_dir.vpk

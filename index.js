@@ -1,17 +1,16 @@
 /**
- * This code is from csfloat repo. I made small changes to get the images.
- * https://github.com/csfloat/cs-files/blob/5ff0f212ff0dc2b6f6380fc6d1a93121c2b9c2cd/index.js
+ * Modified code to process VPK files in batches.
  */
 const SteamUser = require("steam-user");
 const fs = require("fs");
 const vpk = require("vpk");
-const { exec } = require("child_process");
 
 const appId = 570;
 const depotIds = [381451, 381452, 381453, 381454, 381455, 373301];
 const dir = `./static`;
 const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
+const processedVPKsFile = "processedVPKs.txt";
 
 const vpkFiles = [
   "panorama/images/econ/challenges",
@@ -103,8 +102,6 @@ function getRequiredVPKFiles(vpkDir) {
   for (const fileName of vpkDir.files) {
     for (const f of vpkFiles) {
       if (fileName.startsWith(f)) {
-        // console.log(`Found VPK entry for ${f}: ${fileName}`);
-
         const archiveIndex = vpkDir.tree[fileName].archiveIndex;
         requiredIndices.add(archiveIndex);
         break;
@@ -115,178 +112,82 @@ function getRequiredVPKFiles(vpkDir) {
   return Array.from(requiredIndices).sort((a, b) => a - b);
 }
 
-const path = require("path");
+async function downloadVPKArchives(user, manifests, indicesToProcess) {
+  console.log(`Indices to process in this batch: ${indicesToProcess}`);
 
-async function downloadVPKArchives(user, manifests, requiredIndices) {
-  console.log(`Требуемые VPK-файлы: ${requiredIndices}`);
-  const batchSize = 1; // Размер пакета
+  let fileIndex = 1;
+  const totalFiles = indicesToProcess.length;
 
-  for (let i = 0; i < requiredIndices.length; i += batchSize) {
-    const batchIndices = requiredIndices.slice(i, i + batchSize);
-    console.log(`Обработка пакета: ${batchIndices}`);
-
-    for (const index of batchIndices) {
-      const paddedIndex = index.toString().padStart(3, "0");
-      const fileName = `pak01_${paddedIndex}.vpk`;
-      const filePath = path.join(temp, fileName);
-
-      let fileFound = false;
-
-      for (const depotId of depotIds) {
-        const manifest = manifests[depotId];
-        if (!manifest) continue;
-
-        const file = manifest.files.find((f) => f.filename.endsWith(fileName));
-        if (file) {
-          console.log(`Скачивание ${fileName} из депо ${depotId}`);
-          await user.downloadFile(appId, depotId, file, filePath);
-          fileFound = true;
-          break;
-        }
-      }
-
-      if (!fileFound) {
-        console.error(`Файл ${fileName} не найден ни в одном депо.`);
-        return; // Прерываем выполнение, так как отсутствует необходимый файл
-      }
-    }
-
-    // Проверяем, что все файлы в текущем пакете существуют
-    const missingFiles = batchIndices.filter((index) => {
-      const paddedIndex = index.toString().padStart(3, "0");
-      return !fs.existsSync(path.join(temp, `pak01_${paddedIndex}.vpk`));
-    });
-
-    if (missingFiles.length > 0) {
-      console.error(`Следующие файлы отсутствуют: ${missingFiles.join(", ")}`);
-      return; // Прерываем выполнение, так как отсутствуют файлы
-    }
-
-    // Запуск декомпилятора на загруженных VPK-файлах
-    await runDecompiler(batchIndices);
-
-    // Коммит изменений
-    await setupGitConfig();
-    await commitChanges();
-
-    // Очистка файлов для освобождения места
-    await cleanupFiles(batchIndices);
-  }
-}
-
-const { spawn } = require("child_process");
-
-async function runDecompiler() {
-  console.log("Запуск декомпилятора...");
-
-  return new Promise((resolve, reject) => {
-    const decompiler = spawn("./Decompiler", [
-      "-i",
-      "./temp/pak01_dir.vpk",
-      "-o",
-      "./static",
-      "-e",
-      "vtex_c",
-      "-d",
-      "-f",
-      "panorama/images/econ",
-    ]);
-
-    decompiler.stdout.on("data", (data) => {
-      process.stdout.write(`stdout: ${data}`);
-    });
-
-    decompiler.stderr.on("data", (data) => {
-      process.stderr.write(`stderr: ${data}`);
-    });
-
-    decompiler.on("close", (code) => {
-      if (code === 0) {
-        console.log(`Декомпилятор успешно завершен с кодом ${code}`);
-        resolve();
-      } else {
-        reject(
-          new Error(`Декомпилятор завершен с ошибкой, код выхода: ${code}`)
-        );
-      }
-    });
-  });
-}
-
-async function setupGitConfig() {
-  return new Promise((resolve, reject) => {
-    exec(
-      'git config user.name "GitHub Actions" && git config user.email "actions@github.com"',
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error(`Ошибка настройки Git: ${error.message}`);
-          reject(error);
-        } else {
-          resolve();
-        }
-      }
-    );
-  });
-}
-
-async function commitChanges() {
-  console.log("Коммит изменений...");
-  return new Promise((resolve, reject) => {
-    exec(
-      'git add . && git commit -m "Обновление файлов игры" && git push',
-      (error, stdout, stderr) => {
-        if (error) {
-          console.error(`Ошибка при коммите: ${error.message}`);
-          reject(error);
-        } else {
-          console.log(`Коммит выполнен: ${stdout}`);
-          resolve();
-        }
-      }
-    );
-  });
-}
-
-async function cleanupFiles(batchIndices) {
-  console.log("Очистка файлов...");
-
-  // Удаление VPK-файлов
-  for (const index of batchIndices) {
+  for (const index of indicesToProcess) {
     const paddedIndex = index.toString().padStart(3, "0");
     const fileName = `pak01_${paddedIndex}.vpk`;
-    const filePath = `${temp}/${fileName}`;
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log(`Удален файл: ${filePath}`);
-    }
-  }
 
-  // Удаление распакованного контента
-  const extractPath = "./static/panorama/images/econ";
-  if (fs.existsSync(extractPath)) {
-    fs.rmSync(extractPath, { recursive: true, force: true });
-    console.log(`Удален распакованный контент: ${extractPath}`);
+    let fileFound = false;
+
+    for (const depotId of depotIds) {
+      const manifest = manifests[depotId];
+
+      if (!manifest) {
+        continue;
+      }
+
+      const file = manifest.files.find((f) => f.filename.endsWith(fileName));
+
+      if (file) {
+        const filePath = `${temp}/${fileName}`;
+        const status = `[${fileIndex}/${totalFiles}]`;
+
+        console.log(`${status} Downloading ${fileName} from depot ${depotId}`);
+
+        await user.downloadFile(appId, depotId, file, filePath);
+        fileFound = true;
+        break;
+      }
+    }
+
+    if (!fileFound) {
+      console.error(`File ${fileName} not found in any depot.`);
+    }
+
+    fileIndex++;
   }
+}
+
+function getProcessedIndices() {
+  let processedIndices = [];
+  try {
+    const data = fs.readFileSync(`${dir}/${processedVPKsFile}`, "utf8");
+    processedIndices = data
+      .split("\n")
+      .map(Number)
+      .filter((num) => !isNaN(num));
+  } catch (err) {
+    if (err.code !== "ENOENT") {
+      throw err;
+    }
+    // File doesn't exist, no indices have been processed yet
+  }
+  return processedIndices;
 }
 
 if (process.argv.length != 4) {
   console.error(
-    `Недостаточно аргументов, ожидается 4, получено ${process.argv.length}`
+    `Missing input arguments, expected 4 got ${process.argv.length}`
   );
   process.exit(1);
 }
 
 if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir, { recursive: true });
+  fs.mkdirSync(dir);
 }
 
 if (!fs.existsSync(temp)) {
-  fs.mkdirSync(temp, { recursive: true });
+  fs.mkdirSync(temp);
 }
 
 const user = new SteamUser();
 
-console.log("Вход в Steam...");
+console.log("Logging into Steam....");
 
 user.logOn({
   accountName: process.argv[2],
@@ -299,13 +200,13 @@ user.once("loggedOn", async () => {
   const manifests = await getManifests(user);
 
   if (!manifests[373301]) {
-    console.error(`Манифест для депо 373301 не удалось получить.`);
+    console.error(`Manifest for depot 373301 could not be retrieved.`);
     process.exit(1);
   }
 
   const latestManifestId = manifests[373301].manifestId;
 
-  console.log(`Получен последний ID манифеста: ${latestManifestId}`);
+  console.log(`Obtained latest manifest ID: ${latestManifestId}`);
 
   let existingManifestId = "";
 
@@ -318,24 +219,68 @@ user.once("loggedOn", async () => {
   }
 
   if (existingManifestId == latestManifestId) {
-    console.log("Последний ID манифеста совпадает с существующим, выход");
-    process.exit(0);
+    console.log("Latest manifest ID matches existing manifest ID, proceeding");
+    // Don't exit, because we may have unprocessed VPK files
+  } else {
+    console.log(
+      "Latest manifest ID does not match existing manifest ID, will update"
+    );
+    // Write the new manifest ID
+    try {
+      fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
+    } catch (error) {
+      throw error;
+    }
+    // Clear processedVPKs.txt since manifest has changed
+    try {
+      fs.unlinkSync(`${dir}/${processedVPKsFile}`);
+    } catch (err) {
+      if (err.code != "ENOENT") {
+        throw err;
+      }
+    }
   }
-
-  console.log("Новый манифест найден, начинается загрузка файлов игры");
 
   const vpkDir = await downloadVPKDir(user, manifests[373301]);
 
   const requiredIndices = getRequiredVPKFiles(vpkDir);
 
-  // Сохраняем новый manifestId перед началом процесса
-  try {
-    fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
-  } catch (error) {
-    throw error;
+  const processedIndices = getProcessedIndices();
+
+  // Get unprocessed indices
+  const unprocessedIndices = requiredIndices.filter(
+    (index) => !processedIndices.includes(index)
+  );
+
+  if (unprocessedIndices.length === 0) {
+    console.log("All VPK files have been processed.");
+    process.exit(0);
   }
 
-  await downloadVPKArchives(user, manifests, requiredIndices);
+  // Get the next batch of up to 10 indices
+  const batchSize = 10;
+  const indicesToProcess = unprocessedIndices.slice(0, batchSize);
+
+  console.log(`Processing indices: ${indicesToProcess}`);
+
+  await downloadVPKArchives(user, manifests, indicesToProcess);
+
+  // Update processedVPKs.txt
+  try {
+    fs.appendFileSync(
+      `${dir}/${processedVPKsFile}`,
+      indicesToProcess.join("\n") + "\n"
+    );
+  } catch (err) {
+    throw err;
+  }
+
+  // Save current batch indices to currentBatch.txt
+  try {
+    fs.writeFileSync(`${dir}/currentBatch.txt`, indicesToProcess.join("\n"));
+  } catch (err) {
+    throw err;
+  }
 
   process.exit(0);
 });
