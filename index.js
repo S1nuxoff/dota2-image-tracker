@@ -115,10 +115,12 @@ function getRequiredVPKFiles(vpkDir) {
   return Array.from(requiredIndices).sort((a, b) => a - b);
 }
 
+const path = require("path");
+
 async function downloadVPKArchives(user, manifests, requiredIndices) {
   console.log(`Требуемые VPK-файлы: ${requiredIndices}`);
+  const batchSize = 10; // Размер пакета
 
-  const batchSize = 2; // Размер пакета
   for (let i = 0; i < requiredIndices.length; i += batchSize) {
     const batchIndices = requiredIndices.slice(i, i + batchSize);
     console.log(`Обработка пакета: ${batchIndices}`);
@@ -126,22 +128,17 @@ async function downloadVPKArchives(user, manifests, requiredIndices) {
     for (const index of batchIndices) {
       const paddedIndex = index.toString().padStart(3, "0");
       const fileName = `pak01_${paddedIndex}.vpk`;
+      const filePath = path.join(temp, fileName);
 
       let fileFound = false;
 
       for (const depotId of depotIds) {
         const manifest = manifests[depotId];
-
-        if (!manifest) {
-          continue;
-        }
+        if (!manifest) continue;
 
         const file = manifest.files.find((f) => f.filename.endsWith(fileName));
-
         if (file) {
-          const filePath = `${temp}/${fileName}`;
           console.log(`Скачивание ${fileName} из депо ${depotId}`);
-
           await user.downloadFile(appId, depotId, file, filePath);
           fileFound = true;
           break;
@@ -150,7 +147,19 @@ async function downloadVPKArchives(user, manifests, requiredIndices) {
 
       if (!fileFound) {
         console.error(`Файл ${fileName} не найден ни в одном депо.`);
+        return; // Прерываем выполнение, так как отсутствует необходимый файл
       }
+    }
+
+    // Проверяем, что все файлы в текущем пакете существуют
+    const missingFiles = batchIndices.filter((index) => {
+      const paddedIndex = index.toString().padStart(3, "0");
+      return !fs.existsSync(path.join(temp, `pak01_${paddedIndex}.vpk`));
+    });
+
+    if (missingFiles.length > 0) {
+      console.error(`Следующие файлы отсутствуют: ${missingFiles.join(", ")}`);
+      return; // Прерываем выполнение, так как отсутствуют файлы
     }
 
     // Запуск декомпилятора на загруженных VPK-файлах
