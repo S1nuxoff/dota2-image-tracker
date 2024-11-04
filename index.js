@@ -1,5 +1,6 @@
 /**
- * Modified code to process VPK files in batches.
+ * This code is from csfloat repo. I made small changes to get the images.
+ * https://github.com/csfloat/cs-files/blob/5ff0f212ff0dc2b6f6380fc6d1a93121c2b9c2cd/index.js
  */
 const SteamUser = require("steam-user");
 const fs = require("fs");
@@ -10,7 +11,6 @@ const depotIds = [381451, 381452, 381453, 381454, 381455, 373301];
 const dir = `./static`;
 const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
-const processedVPKsFile = "processedVPKs.txt";
 
 const vpkFiles = [
   "panorama/images/econ/challenges",
@@ -45,6 +45,102 @@ const vpkFiles = [
   "panorama/images/econ/talentcontent",
   "panorama/images/econ/teamfancontent",
 ];
+
+const BATCH_SIZE = 10;
+const requiredVPKsFile = "requiredVPKs.txt";
+const processedVPKsFile = "processedVPKs.txt";
+
+if (process.argv.length != 4) {
+  console.error(
+    `Missing input arguments, expected 4 got ${process.argv.length}`
+  );
+  process.exit(1);
+}
+
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir);
+}
+
+if (!fs.existsSync(temp)) {
+  fs.mkdirSync(temp);
+}
+
+const user = new SteamUser();
+
+console.log("Logging into Steam....");
+
+user.logOn({
+  accountName: process.argv[2],
+  password: process.argv[3],
+  rememberPassword: true,
+  logonID: 2121,
+});
+
+user.once("loggedOn", async () => {
+  const manifests = await getManifests(user);
+
+  if (!manifests[373301]) {
+    console.error(`Manifest for depot 373301 could not be retrieved.`);
+    process.exit(1);
+  }
+
+  const latestManifestId = manifests[373301].manifestId;
+
+  console.log(`Obtained latest manifest ID: ${latestManifestId}`);
+
+  let existingManifestId = "";
+
+  try {
+    existingManifestId = fs.readFileSync(`${dir}/${manifestIdFile}`, "utf8");
+  } catch (err) {
+    if (err.code != "ENOENT") {
+      throw err;
+    }
+  }
+
+  if (existingManifestId == latestManifestId) {
+    console.log("Latest manifest ID matches existing manifest ID, exiting");
+    process.exit(0);
+  }
+
+  console.log(
+    "Latest manifest ID does not match existing manifest ID, downloading game files"
+  );
+
+  const vpkDir = await downloadVPKDir(user, manifests[373301]);
+
+  const requiredIndices = getRequiredVPKFiles(vpkDir);
+
+  let processedIndices = [];
+  if (fs.existsSync(processedVPKsFile)) {
+    const processedData = fs.readFileSync(processedVPKsFile, "utf8");
+    processedIndices = processedData.split(",").map(Number);
+  }
+
+  let unprocessedIndices = requiredIndices.filter(
+    (i) => !processedIndices.includes(i)
+  );
+
+  if (unprocessedIndices.length === 0) {
+    console.log("All VPK files have been processed.");
+    // Update manifestId.txt
+    fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
+    process.exit(0);
+  }
+
+  const batchIndices = unprocessedIndices.slice(0, BATCH_SIZE);
+
+  console.log(`Processing batch indices: ${batchIndices}`);
+
+  await downloadVPKArchives(user, manifests, batchIndices);
+
+  // Update processedVPKs.txt
+  processedIndices = processedIndices.concat(batchIndices);
+  fs.writeFileSync(processedVPKsFile, processedIndices.join(","));
+
+  // Exit with code 1 to indicate more batches to process
+  process.exit(1);
+});
 
 async function getManifests(user) {
   console.log(`Fetching product info for appId ${appId}`);
@@ -109,16 +205,23 @@ function getRequiredVPKFiles(vpkDir) {
     }
   }
 
-  return Array.from(requiredIndices).sort((a, b) => a - b);
+  const indicesArray = Array.from(requiredIndices).sort((a, b) => a - b);
+
+  // Write to requiredVPKs.txt if it doesn't exist
+  if (!fs.existsSync(requiredVPKsFile)) {
+    fs.writeFileSync(requiredVPKsFile, indicesArray.join(","));
+  }
+
+  return indicesArray;
 }
 
-async function downloadVPKArchives(user, manifests, indicesToProcess) {
-  console.log(`Indices to process in this batch: ${indicesToProcess}`);
+async function downloadVPKArchives(user, manifests, batchIndices) {
+  console.log(`Required VPK files in batch: ${batchIndices}`);
 
   let fileIndex = 1;
-  const totalFiles = indicesToProcess.length;
+  const totalFiles = batchIndices.length;
 
-  for (const index of indicesToProcess) {
+  for (const index of batchIndices) {
     const paddedIndex = index.toString().padStart(3, "0");
     const fileName = `pak01_${paddedIndex}.vpk`;
 
@@ -152,135 +255,3 @@ async function downloadVPKArchives(user, manifests, indicesToProcess) {
     fileIndex++;
   }
 }
-
-function getProcessedIndices() {
-  let processedIndices = [];
-  try {
-    const data = fs.readFileSync(`${dir}/${processedVPKsFile}`, "utf8");
-    processedIndices = data
-      .split("\n")
-      .map(Number)
-      .filter((num) => !isNaN(num));
-  } catch (err) {
-    if (err.code !== "ENOENT") {
-      throw err;
-    }
-    // File doesn't exist, no indices have been processed yet
-  }
-  return processedIndices;
-}
-
-if (process.argv.length != 4) {
-  console.error(
-    `Missing input arguments, expected 4 got ${process.argv.length}`
-  );
-  process.exit(1);
-}
-
-if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir);
-}
-
-if (!fs.existsSync(temp)) {
-  fs.mkdirSync(temp);
-}
-
-const user = new SteamUser();
-
-console.log("Logging into Steam....");
-
-user.logOn({
-  accountName: process.argv[2],
-  password: process.argv[3],
-  rememberPassword: true,
-  logonID: 2121,
-});
-
-user.once("loggedOn", async () => {
-  const manifests = await getManifests(user);
-
-  if (!manifests[373301]) {
-    console.error(`Manifest for depot 373301 could not be retrieved.`);
-    process.exit(1);
-  }
-
-  const latestManifestId = manifests[373301].manifestId;
-
-  console.log(`Obtained latest manifest ID: ${latestManifestId}`);
-
-  let existingManifestId = "";
-
-  try {
-    existingManifestId = fs.readFileSync(`${dir}/${manifestIdFile}`, "utf8");
-  } catch (err) {
-    if (err.code != "ENOENT") {
-      throw err;
-    }
-  }
-
-  if (existingManifestId == latestManifestId) {
-    console.log("Latest manifest ID matches existing manifest ID, proceeding");
-    // Don't exit, because we may have unprocessed VPK files
-  } else {
-    console.log(
-      "Latest manifest ID does not match existing manifest ID, will update"
-    );
-    // Write the new manifest ID
-    try {
-      fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
-    } catch (error) {
-      throw error;
-    }
-    // Clear processedVPKs.txt since manifest has changed
-    try {
-      fs.unlinkSync(`${dir}/${processedVPKsFile}`);
-    } catch (err) {
-      if (err.code != "ENOENT") {
-        throw err;
-      }
-    }
-  }
-
-  const vpkDir = await downloadVPKDir(user, manifests[373301]);
-
-  const requiredIndices = getRequiredVPKFiles(vpkDir);
-
-  const processedIndices = getProcessedIndices();
-
-  // Get unprocessed indices
-  const unprocessedIndices = requiredIndices.filter(
-    (index) => !processedIndices.includes(index)
-  );
-
-  if (unprocessedIndices.length === 0) {
-    console.log("All VPK files have been processed.");
-    process.exit(0);
-  }
-
-  // Get the next batch of up to 10 indices
-  const batchSize = 2;
-  const indicesToProcess = unprocessedIndices.slice(0, batchSize);
-
-  console.log(`Processing indices: ${indicesToProcess}`);
-
-  await downloadVPKArchives(user, manifests, indicesToProcess);
-
-  // Update processedVPKs.txt
-  try {
-    fs.appendFileSync(
-      `${dir}/${processedVPKsFile}`,
-      indicesToProcess.join("\n") + "\n"
-    );
-  } catch (err) {
-    throw err;
-  }
-
-  // Save current batch indices to currentBatch.txt
-  try {
-    fs.writeFileSync(`${dir}/currentBatch.txt`, indicesToProcess.join("\n"));
-  } catch (err) {
-    throw err;
-  }
-
-  process.exit(0);
-});
