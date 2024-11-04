@@ -12,19 +12,7 @@ const dir = `./static`;
 const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
 
-const vpkFolders = [
-  "econ/ui/treasure/ti_2023_treasure",
-  //   "panorama/images/econ/default_generated",
-  // "panorama/images/econ/music_kits",
-  // "panorama/images/econ/patches",
-  //   "panorama/images/econ/season_icons",
-  //   "panorama/images/econ/set_icons",
-  //   "panorama/images/econ/status_icons",
-  //   "panorama/images/econ/stickers",
-  //   "panorama/images/econ/tools",
-  //   "panorama/images/econ/weapons",
-  //   "panorama/images/econ/weapon_cases",
-];
+const vpkFiles = ["panorama/images/econ/ui/treasure/ti_2023_treasure"];
 
 async function getManifests(user) {
   console.log(`Fetching product info for appId ${appId}`);
@@ -77,25 +65,21 @@ async function downloadVPKDir(user, manifest) {
 }
 
 function getRequiredVPKFiles(vpkDir) {
-  const requiredIndices = [];
+  const requiredIndices = new Set();
 
   for (const fileName of vpkDir.files) {
-    for (const f of vpkFolders) {
+    for (const f of vpkFiles) {
       if (fileName.startsWith(f)) {
-        console.log(`Found vpk for ${f}: ${fileName}`);
+        console.log(`Found VPK entry for ${f}: ${fileName}`);
 
         const archiveIndex = vpkDir.tree[fileName].archiveIndex;
-
-        if (!requiredIndices.includes(archiveIndex)) {
-          requiredIndices.push(archiveIndex);
-        }
-
+        requiredIndices.add(archiveIndex);
         break;
       }
     }
   }
 
-  return requiredIndices.sort((a, b) => a - b);
+  return Array.from(requiredIndices).sort((a, b) => a - b);
 }
 
 async function downloadVPKArchives(user, manifests, requiredIndices) {
@@ -175,14 +159,12 @@ user.once("loggedOn", async () => {
 
   const latestManifestId = manifests[373301].manifestId;
 
-  console.log(
-    `Obtained latest manifest ID for depot 373301: ${latestManifestId}`
-  );
+  console.log(`Obtained latest manifest ID: ${latestManifestId}`);
 
   let existingManifestId = "";
 
   try {
-    existingManifestId = fs.readFileSync(`${dir}/${manifestIdFile}`);
+    existingManifestId = fs.readFileSync(`${dir}/${manifestIdFile}`, "utf8");
   } catch (err) {
     if (err.code != "ENOENT") {
       throw err;
@@ -190,12 +172,12 @@ user.once("loggedOn", async () => {
   }
 
   if (existingManifestId == latestManifestId) {
-    console.log("Latest manifest Id matches existing manifest Id, exiting");
+    console.log("Latest manifest ID matches existing manifest ID, exiting");
     process.exit(0);
   }
 
   console.log(
-    "Latest manifest Id does not match existing manifest Id, downloading game files"
+    "Latest manifest ID does not match existing manifest ID, downloading game files"
   );
 
   const vpkDir = await downloadVPKDir(user, manifests[373301]);
