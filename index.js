@@ -102,7 +102,7 @@ function getRequiredVPKFiles(vpkDir) {
   for (const fileName of vpkDir.files) {
     for (const f of vpkFiles) {
       if (fileName.startsWith(f)) {
-        console.log(`Found VPK entry for ${f}: ${fileName}`);
+        // console.log(`Found VPK entry for ${f}: ${fileName}`);
 
         const archiveIndex = vpkDir.tree[fileName].archiveIndex;
         requiredIndices.add(archiveIndex);
