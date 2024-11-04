@@ -2,7 +2,7 @@ name: Download Dota Game Files
 
 on:
   schedule:
-    - cron: "0 8 * * *"  # Запускается каждый день в 8 утра по UTC
+     - cron: "50 7 * * *" # Запускается каждый день в 8 утра по UTC
 
   workflow_dispatch:
 
