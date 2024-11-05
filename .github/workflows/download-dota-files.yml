@@ -35,7 +35,19 @@ jobs:
         run: |
           if [ -f "./temp/pak01_dir.vpk" ]; then
             chmod +x ./Decompiler
-            ./Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ" --skip-existing
+            # Используем find для поиска новых VPK-файлов и декомпилируем их по одному
+            for vpk_file in ./temp/pak01_*.vpk; do
+              if [ -f "$vpk_file" ]; then
+                # Проверяем, были ли файлы уже декомпилированы
+                output_dir="./static/$(basename "$vpk_file" .vpk)"
+                if [ ! -d "$output_dir" ]; then
+                  mkdir -p "$output_dir"
+                  ./Decompiler -i "$vpk_file" -o "$output_dir" -e "vtex_c" -d -f "panorama/images/econ"
+                else
+                  echo "Директория $output_dir уже существует, пропускаем декомпиляцию."
+                fi
+              fi
+            done
           else
             echo "pak01_dir.vpk не найден, пропускаем декомпиляцию"
           fi

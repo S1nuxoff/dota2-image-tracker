@@ -14,7 +14,10 @@ const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
 const downloadedVpkFile = `${dir}/downloadedVpk.txt`;
 
-const vpkFolders = ["panorama/images/econ/items"];
+const vpkFolders = [
+  "panorama/images/econ/items",
+  // Добавьте другие папки, если необходимо
+];
 
 async function getManifests(user) {
   console.log(`Получение информации о продукте для appId ${appId}`);
@@ -115,7 +118,7 @@ async function downloadVPKArchives(user, manifests, requiredIndices) {
     return true; // Все файлы загружены
   }
 
-  const indicesToDownload = remainingIndices.slice(0, 2); // Загружаем по 10 файлов за раз
+  const indicesToDownload = remainingIndices.slice(0, 10); // Загружаем по 10 файлов за раз
   console.log(`Загружаем VPK-файлы: ${indicesToDownload.join(",")}`);
 
   let fileIndex = 1;
