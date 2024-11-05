@@ -1,155 +1,23 @@
 /**
- * This code is from csfloat repo. I made small changes to get the images.
- * https://github.com/csfloat/cs-files/blob/5ff0f212ff0dc2b6f6380fc6d1a93121c2b9c2cd/index.js
+ * Модифицированный скрипт для поэтапной загрузки VPK-файлов и декомпиляции.
  */
+
 const SteamUser = require("steam-user");
 const fs = require("fs");
 const vpk = require("vpk");
+const path = require("path");
 
-const appId = 570;
+const appId = 570; // Или другой appId, если требуется
 const depotIds = [381451, 381452, 381453, 381454, 381455, 373301];
 const dir = `./static`;
 const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
+const downloadedVpkFile = `${dir}/downloadedVpk.txt`;
 
-const vpkFiles = [
-  "panorama/images/econ/challenges",
-  "panorama/images/econ/announcer",
-  "panorama/images/econ/artifacts",
-  "panorama/images/econ/bundles",
-  "panorama/images/econ/casters",
-  "panorama/images/econ/courier",
-  "panorama/images/econ/crafting",
-  "panorama/images/econ/creeps",
-  "panorama/images/econ/cursor_pack",
-  "panorama/images/econ/custom_games_pass",
-  "panorama/images/econ/development",
-  "panorama/images/econ/heroes",
-  "panorama/images/econ/huds",
-  "panorama/images/econ/items",
-  "panorama/images/econ/leagues",
-  "panorama/images/econ/loading_screens",
-  "panorama/images/econ/music",
-  "panorama/images/econ/pennant",
-  "panorama/images/econ/pets",
-  "panorama/images/econ/pins",
-  "panorama/images/econ/props_gameplay",
-  "panorama/images/econ/sets",
-  "panorama/images/econ/sockets",
-  "panorama/images/econ/taunts",
-  "panorama/images/econ/terrain",
-  "panorama/images/econ/tools",
-  "panorama/images/econ/ui/treasure",
-  "panorama/images/econ/voicepack",
-  "panorama/images/econ/stickers",
-  "panorama/images/econ/talentcontent",
-  "panorama/images/econ/teamfancontent",
-];
-const BATCH_SIZE = 1; // Set to 1 for testing
-const requiredVPKsFile = "requiredVPKs.txt";
-const processedVPKsFile = "processedVPKs.txt";
-const batchStatusFile = "batch_status.txt";
-
-if (process.argv.length != 4) {
-  console.error(
-    `Missing input arguments, expected 4 got ${process.argv.length}`
-  );
-  process.exit(1);
-}
-
-if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir);
-}
-
-if (!fs.existsSync(temp)) {
-  fs.mkdirSync(temp);
-}
-
-const user = new SteamUser();
-
-console.log("Logging into Steam....");
-
-user.logOn({
-  accountName: process.argv[2],
-  password: process.argv[3],
-  rememberPassword: true,
-  logonID: 2121,
-});
-
-user.once("loggedOn", async () => {
-  const manifests = await getManifests(user);
-
-  if (!manifests[373301]) {
-    console.error(`Manifest for depot 373301 could not be retrieved.`);
-    fs.writeFileSync(batchStatusFile, "DONE");
-    process.exit(0);
-  }
-
-  const latestManifestId = manifests[373301].manifestId;
-
-  console.log(`Obtained latest manifest ID: ${latestManifestId}`);
-
-  let existingManifestId = "";
-
-  try {
-    existingManifestId = fs.readFileSync(`${dir}/${manifestIdFile}`, "utf8");
-  } catch (err) {
-    if (err.code != "ENOENT") {
-      throw err;
-    }
-  }
-
-  if (existingManifestId == latestManifestId) {
-    console.log("Latest manifest ID matches existing manifest ID, exiting");
-    fs.writeFileSync(batchStatusFile, "DONE");
-    process.exit(0);
-  }
-
-  console.log(
-    "Latest manifest ID does not match existing manifest ID, downloading game files"
-  );
-
-  const vpkDir = await downloadVPKDir(user, manifests[373301]);
-
-  const requiredIndices = getRequiredVPKFiles(vpkDir);
-
-  let processedIndices = [];
-  if (fs.existsSync(processedVPKsFile)) {
-    const processedData = fs.readFileSync(processedVPKsFile, "utf8");
-    processedIndices = processedData.split(",").map(Number);
-  }
-
-  let unprocessedIndices = requiredIndices.filter(
-    (i) => !processedIndices.includes(i)
-  );
-
-  if (unprocessedIndices.length === 0) {
-    console.log("All VPK files have been processed.");
-    // Update manifestId.txt
-    fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
-    fs.writeFileSync(batchStatusFile, "DONE");
-    process.exit(0);
-  }
-
-  const batchIndices = unprocessedIndices.slice(0, BATCH_SIZE);
-
-  console.log(`Processing batch indices: ${batchIndices}`);
-
-  await downloadVPKArchives(user, manifests, batchIndices);
-
-  // Update processedVPKs.txt
-  processedIndices = processedIndices.concat(batchIndices);
-  fs.writeFileSync(processedVPKsFile, processedIndices.join(","));
-
-  // Indicate that there are more batches to process
-  fs.writeFileSync(batchStatusFile, "MORE");
-
-  // Exit with code 0
-  process.exit(0);
-});
+const vpkFolders = ["panorama/images/econ/items"];
 
 async function getManifests(user) {
-  console.log(`Fetching product info for appId ${appId}`);
+  console.log(`Получение информации о продукте для appId ${appId}`);
   const productInfo = await user.getProductInfo([appId], [], true);
   const cs = productInfo.apps[appId].appinfo;
 
@@ -158,13 +26,13 @@ async function getManifests(user) {
   for (const depotId of depotIds) {
     const depot = cs.depots[depotId];
     if (!depot) {
-      console.error(`Depot ${depotId} not found in app's depots`);
+      console.error(`Депо ${depotId} не найдено в списке депо приложения`);
       continue;
     }
     const latestManifestId = depot.manifests.public.gid;
 
     console.log(
-      `Fetching manifest for depot ${depotId}, manifest ID ${latestManifestId}`
+      `Получение манифеста для депо ${depotId}, ID манифеста ${latestManifestId}`
     );
 
     const manifest = await user.getManifest(
@@ -188,7 +56,12 @@ async function downloadVPKDir(user, manifest) {
     file.filename.endsWith("dota\\pak01_dir.vpk")
   );
 
-  console.log(`Downloading pak01_dir.vpk from depot 373301`);
+  if (!dirFile) {
+    console.error("Файл pak01_dir.vpk не найден в манифесте");
+    process.exit(1);
+  }
+
+  console.log(`Загрузка pak01_dir.vpk из депо 373301`);
 
   await user.downloadFile(appId, 373301, dirFile, `${temp}/pak01_dir.vpk`);
 
@@ -199,35 +72,56 @@ async function downloadVPKDir(user, manifest) {
 }
 
 function getRequiredVPKFiles(vpkDir) {
-  const requiredIndices = new Set();
+  const requiredIndices = [];
 
   for (const fileName of vpkDir.files) {
-    for (const f of vpkFiles) {
+    for (const f of vpkFolders) {
       if (fileName.startsWith(f)) {
         const archiveIndex = vpkDir.tree[fileName].archiveIndex;
-        requiredIndices.add(archiveIndex);
+
+        if (!requiredIndices.includes(archiveIndex)) {
+          requiredIndices.push(archiveIndex);
+        }
+
         break;
       }
     }
   }
 
-  const indicesArray = Array.from(requiredIndices).sort((a, b) => a - b);
-
-  // Write to requiredVPKs.txt if it doesn't exist
-  if (!fs.existsSync(requiredVPKsFile)) {
-    fs.writeFileSync(requiredVPKsFile, indicesArray.join(","));
-  }
-
-  return indicesArray;
+  return requiredIndices.sort((a, b) => a - b);
 }
 
-async function downloadVPKArchives(user, manifests, batchIndices) {
-  console.log(`Required VPK files in batch: ${batchIndices}`);
+function getRemainingVPKIndices(requiredIndices) {
+  let downloadedVPKs = [];
+  if (fs.existsSync(downloadedVpkFile)) {
+    const data = fs.readFileSync(downloadedVpkFile, "utf8");
+    if (data.trim() !== "") {
+      downloadedVPKs = data.split(",").map(Number);
+    }
+  }
+
+  const remainingIndices = requiredIndices.filter(
+    (index) => !downloadedVPKs.includes(index)
+  );
+
+  return remainingIndices;
+}
+
+async function downloadVPKArchives(user, manifests, requiredIndices) {
+  const remainingIndices = getRemainingVPKIndices(requiredIndices);
+
+  if (remainingIndices.length === 0) {
+    console.log("Все VPK-файлы уже загружены.");
+    return true; // Все файлы загружены
+  }
+
+  const indicesToDownload = remainingIndices.slice(0, 10); // Загружаем по 10 файлов за раз
+  console.log(`Загружаем VPK-файлы: ${indicesToDownload.join(",")}`);
 
   let fileIndex = 1;
-  const totalFiles = batchIndices.length;
+  const totalFiles = indicesToDownload.length;
 
-  for (const index of batchIndices) {
+  for (const index of indicesToDownload) {
     const paddedIndex = index.toString().padStart(3, "0");
     const fileName = `pak01_${paddedIndex}.vpk`;
 
@@ -246,7 +140,7 @@ async function downloadVPKArchives(user, manifests, batchIndices) {
         const filePath = `${temp}/${fileName}`;
         const status = `[${fileIndex}/${totalFiles}]`;
 
-        console.log(`${status} Downloading ${fileName} from depot ${depotId}`);
+        console.log(`${status} Загрузка ${fileName} из депо ${depotId}`);
 
         await user.downloadFile(appId, depotId, file, filePath);
         fileFound = true;
@@ -255,9 +149,112 @@ async function downloadVPKArchives(user, manifests, batchIndices) {
     }
 
     if (!fileFound) {
-      console.error(`File ${fileName} not found in any depot.`);
+      console.error(`Файл ${fileName} не найден ни в одном депо.`);
     }
 
     fileIndex++;
   }
+
+  // Обновляем downloadedVpk.txt
+  let downloadedVPKs = [];
+  if (fs.existsSync(downloadedVpkFile)) {
+    const data = fs.readFileSync(downloadedVpkFile, "utf8");
+    if (data.trim() !== "") {
+      downloadedVPKs = data.split(",").map(Number);
+    }
+  }
+
+  downloadedVPKs = downloadedVPKs.concat(indicesToDownload);
+  fs.writeFileSync(downloadedVpkFile, downloadedVPKs.join(","));
+
+  return false; // Есть еще файлы для загрузки
 }
+
+if (process.argv.length != 4) {
+  console.error(
+    `Недостаточно аргументов, ожидается 4, получено ${process.argv.length}`
+  );
+  process.exit(1);
+}
+
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir);
+}
+
+if (!fs.existsSync(temp)) {
+  fs.mkdirSync(temp);
+}
+
+const user = new SteamUser();
+
+console.log("Вход в Steam...");
+
+user.logOn({
+  accountName: process.argv[2],
+  password: process.argv[3],
+  rememberPassword: true,
+  logonID: 2121,
+});
+
+user.once("loggedOn", async () => {
+  const manifests = await getManifests(user);
+
+  if (!manifests[373301]) {
+    console.error(`Манифест для депо 373301 не получен.`);
+    process.exit(1);
+  }
+
+  const latestManifestId = manifests[373301].manifestId;
+
+  console.log(
+    `Получен последний ID манифеста для депо 373301: ${latestManifestId}`
+  );
+
+  let existingManifestId = "";
+
+  try {
+    existingManifestId = fs.readFileSync(`${dir}/${manifestIdFile}`, "utf8");
+  } catch (err) {
+    if (err.code != "ENOENT") {
+      throw err;
+    }
+  }
+
+  if (
+    existingManifestId == latestManifestId &&
+    !fs.existsSync(downloadedVpkFile)
+  ) {
+    console.log("Последний ID манифеста совпадает с существующим, выход.");
+    process.exit(0);
+  }
+
+  console.log("Загружаем основные файлы игры...");
+
+  const vpkDir = await downloadVPKDir(user, manifests[373301]);
+
+  const requiredIndices = getRequiredVPKFiles(vpkDir);
+
+  const allFilesDownloaded = await downloadVPKArchives(
+    user,
+    manifests,
+    requiredIndices
+  );
+
+  if (allFilesDownloaded) {
+    console.log("Все необходимые VPK-файлы загружены.");
+
+    // Обновляем manifestId.txt
+    fs.writeFileSync(`${dir}/${manifestIdFile}`, latestManifestId);
+
+    // Удаляем downloadedVpk.txt
+    if (fs.existsSync(downloadedVpkFile)) {
+      fs.unlinkSync(downloadedVpkFile);
+    }
+  } else {
+    console.log(
+      "Не все VPK-файлы загружены, потребуется дополнительный запуск."
+    );
+  }
+
+  process.exit(0);
+});

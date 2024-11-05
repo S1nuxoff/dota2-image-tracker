@@ -1,66 +1,57 @@
-name: Download Dota Game Files
+name: Download CS Game Files
 
 on:
   schedule:
     - cron: "0 8 * * *"
-
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   download:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write # To commit and push changes back to the repository
+      contents: write
 
     steps:
       - uses: actions/checkout@v3
         with:
-          persist-credentials: true # Keeps GitHub token for git push
+          lfs: true # Если используете Git LFS для больших файлов
+
       - uses: actions/setup-node@v3
-      - name: Set up git user
-        run: |
-          git config user.name 'GitHub Actions'
-          git config user.email 'actions@github.com'
-      - name: Install dependencies
+
+      - name: Установка зависимостей
         run: npm install
-      - name: Ensure Decompiler is executable
-        run: chmod +x ./Decompiler
-      - name: Process VPK files in batches
+
+      - name: Запуск скрипта для загрузки файлов
+        env:
+          USERNAME: ${{ secrets.USERNAME }}
+          PASSWORD: ${{ secrets.PASSWORD }}
+        run: node index.js "$USERNAME" "$PASSWORD"
+
+      - name: Запуск декомпилятора
         run: |
-          while true; do
-            # Run the index.js script and prevent failure on non-zero exit code
-            node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}' || true
+          if [ -f "./temp/pak01_dir.vpk" ]; then
+            chmod +x ./Decompiler
+            ./Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ" --skip-existing
+          else
+            echo "pak01_dir.vpk не найден, пропускаем декомпиляцию"
+          fi
 
-            # Читаем статус партии
-            BATCH_STATUS=$(cat batch_status.txt)
-            echo "Batch Status: $BATCH_STATUS"
-
-            if [ "$BATCH_STATUS" = "DONE" ]; then
-              echo "All VPK files processed."
-              break
-            fi
-
-            # Проверяем, существует ли файл pak01_dir.vpk
-            if [ -f "./temp/pak01_dir.vpk" ]; then
-              # Запуск декомпилятора
-              ./Decompiler -i "./temp/pak01_dir.vpk" -o "./static" -e "vtex_c" -d -f "panorama/images/econ"
-            else
-              echo "pak01_dir.vpk not found, skipping decompilation"
-            fi
-
-            # Коммитим только новые файлы
-            git add -A --ignore-errors  # Добавляем все новые файлы
-            git diff --cached --name-only --diff-filter=A | xargs git add  # Коммитим только добавленные файлы
-            git commit -m "Processed batch $(date +"%Y-%m-%d %H:%M:%S")" || echo "No new files to commit"
-            git push
-
-            # Очистка временных файлов для следующей партии
-            rm -rf ./temp/*
-          done
-      - name: Final Commit
-        if: ${{ steps.checkout.outputs.changed == 'true' }}
+      - name: Настройка Git
         run: |
-          git add .
-          git commit -m "Final commit after all batches"
-          git push
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Добавление изменений
+        run: |
+          git add ./static
+          git diff-index --quiet HEAD || git commit -m "Обновление статических файлов"
+
+      - name: Push изменений
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
