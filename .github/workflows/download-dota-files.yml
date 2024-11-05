@@ -10,6 +10,7 @@ on:
 
 jobs:
   download:
+    if: github.actor != 'github-actions' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     permissions:
@@ -35,7 +36,7 @@ jobs:
         run: |
           if [ -f "./temp/pak01_dir.vpk" ]; then
             chmod +x ./Decompiler
-            # Используем find для поиска новых VPK-файлов и декомпилируем их по одному
+            # Используем цикл для декомпиляции новых VPK-файлов
             for vpk_file in ./temp/pak01_*.vpk; do
               if [ -f "$vpk_file" ]; then
                 # Проверяем, были ли файлы уже декомпилированы
@@ -60,7 +61,7 @@ jobs:
       - name: Добавление изменений
         run: |
           git add ./static
-          git diff-index --quiet HEAD || git commit -m "Обновление статических файлов"
+          git diff-index --quiet HEAD || git commit -m "Обновление статических файлов [skip ci]"
 
       - name: Push изменений
         uses: ad-m/github-push-action@v0.6.0
