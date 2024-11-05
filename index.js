@@ -118,7 +118,7 @@ async function downloadVPKArchives(user, manifests, requiredIndices) {
     return true; // Все файлы загружены
   }
 
-  const indicesToDownload = remainingIndices.slice(0, 10); // Загружаем по 10 файлов за раз
+  const indicesToDownload = remainingIndices.slice(0, 1); // Загружаем по 10 файлов за раз
   console.log(`Загружаем VPK-файлы: ${indicesToDownload.join(",")}`);
 
   let fileIndex = 1;
