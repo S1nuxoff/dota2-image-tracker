@@ -7,17 +7,14 @@ const fs = require("fs");
 const vpk = require("vpk");
 const path = require("path");
 
-const appId = 570; // Или другой appId, если требуется
+const appId = 570; // App ID Dota 2
 const depotIds = [381451, 381452, 381453, 381454, 381455, 373301];
 const dir = `./static`;
 const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
 const downloadedVpkFile = `${dir}/downloadedVpk.txt`;
 
-const vpkFolders = [
-  "panorama/images/econ/items",
-  // Добавьте другие папки, если необходимо
-];
+const vpkFolders = ["panorama/images/econ/items"];
 
 async function getManifests(user) {
   console.log(`Получение информации о продукте для appId ${appId}`);

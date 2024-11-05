@@ -1,45 +1,52 @@
-name: Download CS Game Files
+name: Download and Decompile VPK Files in Batches
 
 on:
   schedule:
-    - cron: "0 8 * * *"
-  workflow_dispatch:
+    - cron: "0 8 * * *" # Ежедневно в 08:00 UTC
+  workflow_dispatch: # Вручную
   push:
     branches:
       - main
+  workflow_run:
+    workflows: ["Download and Decompile VPK Files in Batches"]
+    types:
+      - completed
 
 jobs:
   download:
-    if: github.actor != 'github-actions' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
+      contents: write # Для коммита изменений
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           lfs: true # Если используете Git LFS для больших файлов
 
-      - uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16" # Укажите необходимую версию Node.js
 
-      - name: Установка зависимостей
+      - name: Install dependencies
         run: npm install
 
-      - name: Запуск скрипта для загрузки файлов
+      - name: Run download script
         env:
           USERNAME: ${{ secrets.USERNAME }}
           PASSWORD: ${{ secrets.PASSWORD }}
         run: node index.js "$USERNAME" "$PASSWORD"
 
-      - name: Запуск декомпилятора
+      - name: Run decompiler
         run: |
           if [ -f "./temp/pak01_dir.vpk" ]; then
             chmod +x ./Decompiler
-            # Используем цикл для декомпиляции новых VPK-файлов
+            # Декомпилируем только новые VPK-файлы
             for vpk_file in ./temp/pak01_*.vpk; do
               if [ -f "$vpk_file" ]; then
-                # Проверяем, были ли файлы уже декомпилированы
+                # Проверяем, декомпилирован ли уже файл
                 output_dir="./static/$(basename "$vpk_file" .vpk)"
                 if [ ! -d "$output_dir" ]; then
                   mkdir -p "$output_dir"
@@ -53,17 +60,18 @@ jobs:
             echo "pak01_dir.vpk не найден, пропускаем декомпиляцию"
           fi
 
-      - name: Настройка Git
+      - name: Setup Git
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
-      - name: Добавление изменений
+      - name: Add changes
         run: |
           git add ./static
-          git diff-index --quiet HEAD || git commit -m "Обновление статических файлов [skip ci]"
+          git diff-index --quiet HEAD || git commit -m "Обновление статических файлов"
 
-      - name: Push изменений
+      - name: Push changes
+        if: github.event_name != 'workflow_run'
         uses: ad-m/github-push-action@v0.6.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
