@@ -1,4 +1,4 @@
-name: Download Dota Game Files
+name: Download CS Game Files
 
 on:
   schedule:
@@ -16,12 +16,14 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: "14" # или другая версия Node.js
-      - name: Install dependencies and run script
-        run: |
-          npm install
-          node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'
+          node-version: "16" # или другая подходящая версия Node.js
+      - name: Install dependencies
+        run: npm install
+      - name: Ensure Decompiler is executable
+        run: chmod +x ./Decompiler
+      - name: Run script
+        run: node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'
       - name: Commit & push changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: "manifest ${{ steps.manifestId.outputs.content }}"
+          commit_message: "Update manifest ID to ${{ steps.manifestId.outputs.content }}"

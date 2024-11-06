@@ -10,8 +10,168 @@ const dir = `./static`;
 const temp = "./temp";
 const manifestIdFile = "manifestId.txt";
 
-// ... ваш существующий код (vpkFolders, getManifests, downloadVPKDir, getRequiredVPKFiles, downloadVPKArchives)
+const vpkFolders = [
+  "panorama/images/econ/items",
+  "panorama/images/econ/challenges",
+  "panorama/images/econ/announcer",
+  "panorama/images/econ/artifacts",
+  "panorama/images/econ/bundles",
+  "panorama/images/econ/casters",
+  "panorama/images/econ/courier",
+  "panorama/images/econ/crafting",
+  "panorama/images/econ/creeps",
+  "panorama/images/econ/cursor_pack",
+  "panorama/images/econ/custom_games_pass",
+  "panorama/images/econ/development",
+  "panorama/images/econ/heroes",
+  "panorama/images/econ/huds",
+  "panorama/images/econ/items",
+  "panorama/images/econ/leagues",
+  "panorama/images/econ/loading_screens",
+  "panorama/images/econ/music",
+  "panorama/images/econ/pennant",
+  "panorama/images/econ/pets",
+  "panorama/images/econ/pins",
+  "panorama/images/econ/props_gameplay",
+  "panorama/images/econ/sets",
+  "panorama/images/econ/sockets",
+  "panorama/images/econ/taunts",
+  "panorama/images/econ/terrain",
+  "panorama/images/econ/tools",
+  "panorama/images/econ/ui/treasure",
+  "panorama/images/econ/voicepack",
+  "panorama/images/econ/stickers",
+  "panorama/images/econ/talentcontent",
+  "panorama/images/econ/teamfancontent",
+];
 
+// Функция для получения манифестов
+async function getManifests(user) {
+  console.log(`Fetching product info for appId ${appId}`);
+  const productInfo = await user.getProductInfo([appId], [], true);
+  const cs = productInfo.apps[appId].appinfo;
+
+  let manifests = {};
+
+  for (const depotId of depotIds) {
+    const depot = cs.depots[depotId];
+    if (!depot) {
+      console.error(`Depot ${depotId} not found in app's depots`);
+      continue;
+    }
+    const latestManifestId = depot.manifests.public.gid;
+
+    console.log(
+      `Fetching manifest for depot ${depotId}, manifest ID ${latestManifestId}`
+    );
+
+    const manifest = await user.getManifest(
+      appId,
+      depotId,
+      latestManifestId,
+      "public"
+    );
+
+    manifests[depotId] = {
+      manifestId: latestManifestId,
+      files: manifest.manifest.files,
+    };
+  }
+
+  return manifests;
+}
+
+// Функция для скачивания pak01_dir.vpk
+async function downloadVPKDir(user, manifest) {
+  const dirFile = manifest.files.find((file) =>
+    file.filename.endsWith("dota\\pak01_dir.vpk")
+  );
+
+  if (!dirFile) {
+    throw new Error("pak01_dir.vpk not found in manifest files.");
+  }
+
+  console.log(`Downloading pak01_dir.vpk from depot 373301`);
+
+  await user.downloadFile(
+    appId,
+    373301,
+    dirFile,
+    path.join(temp, "pak01_dir.vpk")
+  );
+
+  const vpkDir = new vpk(path.join(temp, "pak01_dir.vpk"));
+  vpkDir.load();
+
+  return vpkDir;
+}
+
+// Функция для получения необходимых индексов VPK-файлов
+function getRequiredVPKFiles(vpkDir) {
+  const requiredIndices = [];
+
+  for (const fileName of vpkDir.files) {
+    for (const f of vpkFolders) {
+      if (fileName.startsWith(f)) {
+        console.log(`Found vpk for ${f}: ${fileName}`);
+
+        const archiveIndex = vpkDir.tree[fileName].archiveIndex;
+
+        if (!requiredIndices.includes(archiveIndex)) {
+          requiredIndices.push(archiveIndex);
+        }
+
+        break;
+      }
+    }
+  }
+
+  return requiredIndices.sort((a, b) => a - b);
+}
+
+// Функция для скачивания VPK-архивов по индексам
+async function downloadVPKArchives(user, manifests, requiredIndices) {
+  console.log(`Required VPK files: ${requiredIndices}`);
+
+  let fileIndex = 1;
+  const totalFiles = requiredIndices.length;
+
+  for (const index of requiredIndices) {
+    const paddedIndex = index.toString().padStart(3, "0");
+    const fileName = `pak01_${paddedIndex}.vpk`;
+
+    let fileFound = false;
+
+    for (const depotId of depotIds) {
+      const manifest = manifests[depotId];
+
+      if (!manifest) {
+        continue;
+      }
+
+      const file = manifest.files.find((f) => f.filename.endsWith(fileName));
+
+      if (file) {
+        const filePath = path.join(temp, fileName);
+        const status = `[${fileIndex}/${totalFiles}]`;
+
+        console.log(`${status} Downloading ${fileName} from depot ${depotId}`);
+
+        await user.downloadFile(appId, depotId, file, filePath);
+        fileFound = true;
+        break;
+      }
+    }
+
+    if (!fileFound) {
+      console.error(`File ${fileName} not found in any depot.`);
+    }
+
+    fileIndex++;
+  }
+}
+
+// Функция для запуска Decompiler
 async function runDecompiler() {
   return new Promise((resolve, reject) => {
     console.log("Запуск Decompiler...");
@@ -37,6 +197,7 @@ async function runDecompiler() {
   });
 }
 
+// Функция для обработки VPK-файлов пакетами
 async function processVPKFilesInBatches(
   user,
   manifests,
@@ -46,7 +207,9 @@ async function processVPKFilesInBatches(
   for (let i = 0; i < requiredIndices.length; i += batchSize) {
     const batchIndices = requiredIndices.slice(i, i + batchSize);
     console.log(
-      `Обработка пакета ${i / batchSize + 1}: индексы ${batchIndices}`
+      `Обработка пакета ${
+        Math.floor(i / batchSize) + 1
+      }: индексы ${batchIndices}`
     );
 
     // Скачивание текущего пакета VPK-файлов
@@ -55,9 +218,14 @@ async function processVPKFilesInBatches(
     // Запуск Decompiler
     try {
       await runDecompiler();
-      console.log(`Decompiler успешно обработал пакет ${i / batchSize + 1}`);
+      console.log(
+        `Decompiler успешно обработал пакет ${Math.floor(i / batchSize) + 1}`
+      );
     } catch (err) {
-      console.error(`Ошибка при обработке пакета ${i / batchSize + 1}:`, err);
+      console.error(
+        `Ошибка при обработке пакета ${Math.floor(i / batchSize) + 1}:`,
+        err
+      );
       process.exit(1);
     }
 
@@ -74,24 +242,26 @@ async function processVPKFilesInBatches(
   }
 }
 
-if (process.argv.length != 4) {
+// Проверка аргументов командной строки
+if (process.argv.length !== 4) {
   console.error(
-    `Missing input arguments, expected 4 got ${process.argv.length}`
+    `Неверное количество аргументов, ожидается 4, получено ${process.argv.length}`
   );
   process.exit(1);
 }
 
+// Создание необходимых директорий, если они не существуют
 if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir);
+  fs.mkdirSync(dir, { recursive: true });
 }
 
 if (!fs.existsSync(temp)) {
-  fs.mkdirSync(temp);
+  fs.mkdirSync(temp, { recursive: true });
 }
 
 const user = new SteamUser();
 
-console.log("Logging into Steam....");
+console.log("Вход в Steam...");
 
 user.logOn({
   accountName: process.argv[2],
