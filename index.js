@@ -312,7 +312,7 @@ user.once("loggedOn", async () => {
     const requiredIndices = getRequiredVPKFiles(vpkDir);
 
     // Разделение на пакеты по 10
-    const batchSize = 10;
+    const batchSize = 2;
     const totalBatches = Math.ceil(requiredIndices.length / batchSize);
     console.log(`Всего пакетов для обработки: ${totalBatches}`);
 
