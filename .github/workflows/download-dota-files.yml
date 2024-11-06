@@ -1,78 +1,27 @@
-name: Download and Decompile VPK Files in Batches
+name: Download Dota Game Files
 
 on:
   schedule:
-    - cron: "0 8 * * *" # Ежедневно в 08:00 UTC
-  workflow_dispatch: # Вручную
-  push:
-    branches:
-      - main
-  workflow_run:
-    workflows: ["Download and Decompile VPK Files in Batches"]
-    types:
-      - completed
+    - cron: "0 8 * * *"
+  workflow_dispatch:
 
 jobs:
   download:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write # Для коммита изменений
+      contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
-          lfs: true # Если используете Git LFS для больших файлов
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+          node-version: "14" # или другая версия Node.js
+      - name: Install dependencies and run script
+        run: |
+          npm install
+          node index.js '${{ secrets.USERNAME }}' '${{ secrets.PASSWORD }}'
+      - name: Commit & push changes
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          node-version: "16" # Укажите необходимую версию Node.js
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run download script
-        env:
-          USERNAME: ${{ secrets.USERNAME }}
-          PASSWORD: ${{ secrets.PASSWORD }}
-        run: node index.js "$USERNAME" "$PASSWORD"
-
-      - name: Run decompiler
-        run: |
-          if [ -f "./temp/pak01_dir.vpk" ]; then
-            chmod +x ./Decompiler
-            # Декомпилируем только новые VPK-файлы
-            for vpk_file in ./temp/pak01_*.vpk; do
-              if [ -f "$vpk_file" ]; then
-                # Проверяем, декомпилирован ли уже файл
-                output_dir="./static/$(basename "$vpk_file" .vpk)"
-                if [ ! -d "$output_dir" ]; then
-                  mkdir -p "$output_dir"
-                  ./Decompiler -i "$vpk_file" -o "$output_dir" -e "vtex_c" -d -f "panorama/images/econ"
-                else
-                  echo "Директория $output_dir уже существует, пропускаем декомпиляцию."
-                fi
-              fi
-            done
-          else
-            echo "pak01_dir.vpk не найден, пропускаем декомпиляцию"
-          fi
-
-      - name: Setup Git
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-
-      - name: Add changes
-        run: |
-          git add ./static
-          git diff-index --quiet HEAD || git commit -m "Обновление статических файлов"
-
-      - name: Push changes
-        if: github.event_name != 'workflow_run'
-        uses: ad-m/github-push-action@v0.6.0
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+          commit_message: "manifest ${{ steps.manifestId.outputs.content }}"
