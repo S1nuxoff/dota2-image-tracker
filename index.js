@@ -270,7 +270,7 @@ async function processVPKFilesInBatches(
   user,
   manifests,
   requiredIndices,
-  batchSize = 1
+  batchSize = 10
 ) {
   for (let i = 0; i < requiredIndices.length; i += batchSize) {
     const batchIndices = requiredIndices.slice(i, i + batchSize);
@@ -394,7 +394,7 @@ user.once("loggedOn", async () => {
     const requiredIndices = getRequiredVPKFiles(vpkDir);
 
     // Разделение на пакеты по 10
-    const batchSize = 1;
+    const batchSize = 10;
     const totalBatches = Math.ceil(requiredIndices.length / batchSize);
     console.log(`Всего пакетов для обработки: ${totalBatches}`);
 
