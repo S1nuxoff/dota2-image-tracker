@@ -113,6 +113,8 @@ function getRequiredVPKFiles(vpkDir) {
   for (const fileName of vpkDir.files) {
     for (const f of vpkFolders) {
       if (fileName.startsWith(f)) {
+        // console.log(`Found vpk for ${f}: ${fileName}`);
+
         const archiveIndex = vpkDir.tree[fileName].archiveIndex;
 
         if (!requiredIndices.includes(archiveIndex)) {
@@ -195,10 +197,42 @@ async function runDecompiler() {
       stdio: ["ignore", "pipe", "pipe"], // Игнорировать stdin, захватывать stdout и stderr
     });
 
+    let stdoutData = "";
+    let stderrData = "";
+
+    decompiler.stdout.on("data", (data) => {
+      stdoutData += data.toString();
+      // Можно закомментировать вывод, если не нужен
+      // console.log(`Decompiler stdout: ${data}`);
+    });
+
+    decompiler.stderr.on("data", (data) => {
+      stderrData += data.toString();
+      // Можно закомментировать вывод, если не нужен
+      // console.error(`Decompiler stderr: ${data}`);
+    });
+
     decompiler.on("close", (code) => {
       if (code === 0) {
         console.log("Decompiler успешно завершен.");
-        showFolderSizes(); // Вывод размера папок после завершения декомпиляции
+        // Здесь можно добавить логику для подсчета файлов, если Decompiler предоставляет такую информацию
+        // Например, если Decompiler выводит "Files processed: X" в stdoutData или stderrData
+        let filesProcessed = 0;
+
+        // Пример парсинга, зависит от формата вывода Decompiler
+        const match =
+          stdoutData.match(/Files processed:\s*(\d+)/i) ||
+          stderrData.match(/Files processed:\s*(\d+)/i);
+        if (match && match[1]) {
+          filesProcessed = parseInt(match[1], 10);
+        } else {
+          // Альтернативный способ: подсчитать количество файлов в выходной директории
+          filesProcessed = countFilesInDirectory(outputPath);
+        }
+
+        console.log(
+          `Всего файлов декомпилировано и сохранено: ${filesProcessed}`
+        );
         resolve();
       } else {
         console.error(`Decompiler завершился с кодом ${code}`);
@@ -213,42 +247,23 @@ async function runDecompiler() {
   });
 }
 
-// Функция для подсчета размера папки
-function getFolderSize(directory) {
-  let totalSize = 0;
-
-  function calculateSize(dir) {
+// Функция для подсчета файлов в директории
+function countFilesInDirectory(directory) {
+  let count = 0;
+  function traverse(dir) {
     const files = fs.readdirSync(dir);
     for (const file of files) {
-      const filePath = path.join(dir, file);
-      const stats = fs.statSync(filePath);
-      if (stats.isDirectory()) {
-        calculateSize(filePath);
+      const filepath = path.join(dir, file);
+      const stat = fs.statSync(filepath);
+      if (stat.isDirectory()) {
+        traverse(filepath);
       } else {
-        totalSize += stats.size;
+        count++;
       }
     }
   }
-
-  calculateSize(directory);
-  return totalSize;
-}
-
-// Функция для форматирования размера в удобный вид
-function formatSize(size) {
-  if (size < 1024) return size + " B";
-  else if (size < 1024 * 1024) return (size / 1024).toFixed(2) + " KB";
-  else if (size < 1024 * 1024 * 1024)
-    return (size / (1024 * 1024)).toFixed(2) + " MB";
-  else return (size / (1024 * 1024 * 1024)).toFixed(2) + " GB";
-}
-
-// Функция для вывода размеров папок temp и static
-function showFolderSizes() {
-  const tempSize = getFolderSize(temp);
-  const staticSize = getFolderSize(dir);
-  console.log(`Размер папки temp: ${formatSize(tempSize)}`);
-  console.log(`Размер папки static: ${formatSize(staticSize)}`);
+  traverse(directory);
+  return count;
 }
 
 // Функция для обработки VPK-файлов пакетами
@@ -272,6 +287,7 @@ async function processVPKFilesInBatches(
     // Запуск Decompiler
     try {
       await runDecompiler();
+      // Здесь мы уже выводим количество файлов, поэтому дополнительных логов не требуется
     } catch (err) {
       console.error(
         `Ошибка при обработке пакета ${Math.floor(i / batchSize) + 1}:`,
