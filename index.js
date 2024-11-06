@@ -172,6 +172,8 @@ async function downloadVPKArchives(user, manifests, requiredIndices) {
 }
 
 // Функция для запуска Decompiler
+const { spawn } = require("child_process");
+
 async function runDecompiler() {
   return new Promise((resolve, reject) => {
     console.log("Запуск Decompiler...");
@@ -181,18 +183,36 @@ async function runDecompiler() {
     const outputPath = path.join(dir);
     const econPath = "panorama/images/econ";
 
-    const command = `${decompilerPath} -i "${inputPath}" -o "${outputPath}" -e "vtex_c" -d -f "${econPath}"`;
+    const args = [
+      "-i",
+      inputPath,
+      "-o",
+      outputPath,
+      "-e",
+      "vtex_c",
+      "-d",
+      "-f",
+      econPath,
+    ];
 
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Ошибка при запуске Decompiler: ${error.message}`);
-        return reject(error);
+    const decompiler = spawn(decompilerPath, args);
+
+    decompiler.stdout.on("data", (data) => {
+      console.log(`Decompiler stdout: ${data}`);
+    });
+
+    decompiler.stderr.on("data", (data) => {
+      console.error(`Decompiler stderr: ${data}`);
+    });
+
+    decompiler.on("close", (code) => {
+      if (code === 0) {
+        console.log("Decompiler успешно завершен.");
+        resolve();
+      } else {
+        console.error(`Decompiler завершился с кодом ${code}`);
+        reject(new Error(`Decompiler exited with code ${code}`));
       }
-      if (stderr) {
-        console.error(`Decompiler stderr: ${stderr}`);
-      }
-      console.log(`Decompiler stdout: ${stdout}`);
-      resolve();
     });
   });
 }
