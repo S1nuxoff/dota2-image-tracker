@@ -266,8 +266,6 @@ function countFilesInDirectory(directory) {
   return count;
 }
 
-// Функция для обработки VPK-файлов пакетами
-// Функция для обработки VPK-файлов пакетами
 async function processVPKFilesInBatches(
   user,
   manifests,
@@ -277,9 +275,9 @@ async function processVPKFilesInBatches(
   for (let i = 0; i < requiredIndices.length; i += batchSize) {
     const batchIndices = requiredIndices.slice(i, i + batchSize);
     console.log(
-      `Обработка пакета ${
-        Math.floor(i / batchSize) + 1
-      }: индексы ${batchIndices}`
+      `Обработка пакета ${Math.floor(i / batchSize) + 1} из ${Math.ceil(
+        requiredIndices.length / batchSize
+      )}: индексы ${batchIndices}`
     );
 
     // Скачивание текущего пакета VPK-файлов
@@ -307,6 +305,10 @@ async function processVPKFilesInBatches(
     console.log(
       `Количество файлов в папке 'static' после декомпиляции: ${filesAfter}`
     );
+
+    // Вывод разницы в количестве файлов
+    const filesAdded = filesAfter - filesBefore;
+    console.log(`Добавлено файлов: ${filesAdded}`);
 
     // Удаление обработанных VPK-файлов
     for (const index of batchIndices) {
