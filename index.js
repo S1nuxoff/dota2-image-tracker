@@ -1,8 +1,8 @@
 const SteamUser = require("steam-user");
 const fs = require("fs");
 const path = require("path");
-const { exec } = require("child_process");
 const vpk = require("vpk");
+const { spawn } = require("child_process");
 
 const appId = 570;
 const depotIds = [381451, 381452, 381453, 381454, 381455, 373301];
@@ -113,14 +113,11 @@ function getRequiredVPKFiles(vpkDir) {
   for (const fileName of vpkDir.files) {
     for (const f of vpkFolders) {
       if (fileName.startsWith(f)) {
-        // console.log(`Found vpk for ${f}: ${fileName}`);
-
         const archiveIndex = vpkDir.tree[fileName].archiveIndex;
 
         if (!requiredIndices.includes(archiveIndex)) {
           requiredIndices.push(archiveIndex);
         }
-
         break;
       }
     }
@@ -171,9 +168,7 @@ async function downloadVPKArchives(user, manifests, requiredIndices) {
   }
 }
 
-// Функция для запуска Decompiler
-const { spawn } = require("child_process");
-
+// Функция для запуска Decompiler и подсчета файлов
 async function runDecompiler() {
   return new Promise((resolve, reject) => {
     console.log("Запуск Decompiler...");
@@ -195,24 +190,33 @@ async function runDecompiler() {
       econPath,
     ];
 
-    const decompiler = spawn(decompilerPath, args);
-
-    decompiler.stdout.on("data", (data) => {
-      console.log(`Decompiler stdout: ${data}`);
-    });
-
-    decompiler.stderr.on("data", (data) => {
-      console.error(`Decompiler stderr: ${data}`);
+    const decompiler = spawn(decompilerPath, args, {
+      stdio: ["ignore", "ignore", "ignore"], // Отключаем весь вывод
     });
 
     decompiler.on("close", (code) => {
       if (code === 0) {
-        console.log("Decompiler успешно завершен.");
-        resolve();
+        // Подсчитываем количество файлов в выходной директории после завершения декомпиляции
+        fs.readdir(outputPath, (err, files) => {
+          if (err) {
+            console.error("Ошибка при чтении выходной директории:", err);
+            return reject(err);
+          }
+          const fileCount = files.length;
+          console.log(
+            `Декомпиляция завершена. Всего декомпилировано и сохранено файлов: ${fileCount}`
+          );
+          resolve();
+        });
       } else {
         console.error(`Decompiler завершился с кодом ${code}`);
         reject(new Error(`Decompiler exited with code ${code}`));
       }
+    });
+
+    decompiler.on("error", (err) => {
+      console.error(`Ошибка при запуске Decompiler: ${err.message}`);
+      reject(err);
     });
   });
 }
@@ -331,7 +335,7 @@ user.once("loggedOn", async () => {
 
     const requiredIndices = getRequiredVPKFiles(vpkDir);
 
-    // Разделение на пакеты по 10
+    // Разделение на пакеты по 2 (или нужное вам количество)
     const batchSize = 2;
     const totalBatches = Math.ceil(requiredIndices.length / batchSize);
     console.log(`Всего пакетов для обработки: ${totalBatches}`);
