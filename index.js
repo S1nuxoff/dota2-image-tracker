@@ -202,7 +202,7 @@ async function processVPKFilesInBatches(
   user,
   manifests,
   requiredIndices,
-  batchSize = 10
+  batchSize = 2
 ) {
   for (let i = 0; i < requiredIndices.length; i += batchSize) {
     const batchIndices = requiredIndices.slice(i, i + batchSize);
