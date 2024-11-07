@@ -1,4 +1,4 @@
-name: Download CS Game Files
+name: Download Dota Images
 
 on:
   schedule:
